@@ -12,6 +12,8 @@ def save(name, img):
     path = OUTPUT / f"{name}.png"
     if not cv2.imwrite(str(path), img):
         raise OSError(f"Cannot save image: {path}")
+    else:
+        print(f"{path} saved successfully")
 
 # Load the image
 image = cv2.imread(str(BASE / "clock.jpg"))
