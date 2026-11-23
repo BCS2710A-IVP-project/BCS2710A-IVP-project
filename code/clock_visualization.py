@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 from pathlib import Path
+import matplotlib.pyplot as plt
+import math 
 
 # Information to get the images for the presentation
 BASE = Path(__file__).resolve().parent
@@ -14,6 +16,34 @@ def save(name, img):
         raise OSError(f"Cannot save image: {path}")
     else:
         print(f"{path} saved successfully")
+    return path
+
+def vector(x1,y1,x2,y2):
+    vector_x = (x2 - x1)
+    vector_y = (y2 - y1)
+    return (vector_x, vector_y)
+
+def vector_length(x,y):
+    x = abs(x)
+    y = abs(y)
+    return math.sqrt((x ** 2) + (y ** 2))
+
+def vector_simplification(vectors):
+    simplified = []
+    simplified_angles = []
+    for vector in sorted(vectors, key=lambda item: item[2], reverse=True):
+        angle = math.degrees(math.atan2(vector[1], vector[0])) % 180
+        has_similar_vector = any(
+            abs((angle - kept_angle + 90) % 180 - 90) <= 10
+            for kept_angle in simplified_angles
+        )
+        if not has_similar_vector:
+            simplified.append(vector)
+            simplified_angles.append(angle)
+            if len(simplified) == 2:
+                break
+    return simplified
+            
 
 # Load the image
 image = cv2.imread(str(BASE / "clock.jpg"))
@@ -65,6 +95,19 @@ lines_display = circles_display.copy()
 lines = cv2.HoughLinesP(edges_display, 1, np.pi / 180, threshold=45,
     minLineLength=max(12, min(h, w) // 9), maxLineGap=12)
 
+
+# Name and BGR tuple
+LINE_COLORS = [
+    ("magenta", (255, 0, 255)),
+    ("yellow",  (0, 255, 255)),
+    ("cyan",    (255, 255, 0)),
+    ("orange",  (0, 165, 255)),
+    ("blue",    (255, 0, 0)),
+    ("lime",    (0, 255, 0)),
+]
+
+vectors = []
+
 if lines is not None:
     for x1, y1, x2, y2 in lines.reshape(-1, 4):
 
@@ -77,14 +120,28 @@ if lines is not None:
         if distance > max(12, radius * 0.12):
             continue
 
-        cv2.line(lines_display, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        dx, dy = vector(x1, y1, x2, y2)
+
+        length = vector_length(dx, dy)
+
+        vectors.append([dx, dy, length, x1, y1, x2, y2])
 
 else:
     print("No lines detected.")
 
-save('lines_display', lines_display)
 
-# Detect small and long hand 
+
+new_vectors = vector_simplification(vectors)
+
+for index, new_vector in enumerate(new_vectors):
+    dx, dy, length, x1, y1, x2, y2 = new_vector
+    color_name, bgr = LINE_COLORS[index % len(LINE_COLORS)]
+    cv2.line(lines_display, (x1, y1), (x2, y2), bgr, 2)
+    print(f"{index + 1}. {color_name}: ({x1},{y1}) -> ({x2},{y2}); Vector value: [{dx}, {dy}]; Vector length: [{length}]")
+
+file_lines_display = save('lines_display', lines_display)
+
+
 
 # Calculate angles
 
