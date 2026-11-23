@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 from pathlib import Path
-import matplotlib.pyplot as plt
 import math 
 
 # Information to get the images for the presentation
@@ -18,16 +17,19 @@ def save(name, img):
         print(f"{path} saved successfully")
     return path
 
+# Convert points from which lines are drawn to vectors
 def vector(x1,y1,x2,y2):
     vector_x = (x2 - x1)
     vector_y = (y2 - y1)
     return (vector_x, vector_y)
 
+# Calculate length of vectors to find longer and shorter hand of the clock
 def vector_length(x,y):
     x = abs(x)
     y = abs(y)
     return math.sqrt((x ** 2) + (y ** 2))
 
+# Find only two vectors: one for longer hand, one for shorter hand
 def vector_simplification(vectors):
     simplified = []
     simplified_angles = []
@@ -42,8 +44,34 @@ def vector_simplification(vectors):
             simplified_angles.append(angle)
             if len(simplified) == 2:
                 break
-    return simplified
-            
+    if simplified[0][2] >= simplified[1][2]:
+        return simplified[0], simplified[1]
+    else:
+        return simplified[1], simplified[0]
+
+# Calculate the angle against the reference line (ie. line from number twelve to the clock center)
+def angle(vector, center):
+    if len(vector) >= 7:
+        endpoint_one = (vector[3], vector[4])
+        endpoint_two = (vector[5], vector[6])
+        distance_one = vector_length(endpoint_one[0] - center[0], endpoint_one[1] - center[1])
+        distance_two = vector_length(endpoint_two[0] - center[0], endpoint_two[1] - center[1])
+        if distance_one >= distance_two:
+            tip = endpoint_one
+        else:
+            tip = endpoint_two
+        vector_x = tip[0] - center[0]
+        vector_y = tip[1] - center[1]
+    else:
+        vector_x = vector[0]
+        vector_y = vector[1]
+    reference_x = 0
+    reference_y = -1
+    dot = reference_x * vector_x + reference_y * vector_y
+    determinant = reference_x * vector_y - reference_y * vector_x
+
+    clockwise_angle = math.degrees(math.atan2(determinant, dot)) % 360
+    return clockwise_angle
 
 # Load the image
 image = cv2.imread(str(BASE / "clock.jpg"))
@@ -91,20 +119,10 @@ save('center_display', circles_display)
 
 # Detect the potential hands of the clock
 lines_display = circles_display.copy()
+simplified_lines_display = circles_display.copy()
 
 lines = cv2.HoughLinesP(edges_display, 1, np.pi / 180, threshold=45,
     minLineLength=max(12, min(h, w) // 9), maxLineGap=12)
-
-
-# Name and BGR tuple
-LINE_COLORS = [
-    ("magenta", (255, 0, 255)),
-    ("yellow",  (0, 255, 255)),
-    ("cyan",    (255, 255, 0)),
-    ("orange",  (0, 165, 255)),
-    ("blue",    (255, 0, 0)),
-    ("lime",    (0, 255, 0)),
-]
 
 vectors = []
 
@@ -120,28 +138,28 @@ if lines is not None:
         if distance > max(12, radius * 0.12):
             continue
 
+        cv2.line(lines_display, (x1, y1), (x2, y2), (255, 0, 0), 2)
+
         dx, dy = vector(x1, y1, x2, y2)
-
         length = vector_length(dx, dy)
-
         vectors.append([dx, dy, length, x1, y1, x2, y2])
 
+    # Detect small and long hand 
+    long_hand, short_hand = vector_simplification(vectors)
+    cv2.line(simplified_lines_display, (long_hand[3],long_hand[4]), (long_hand[5], long_hand[6]), (255, 0, 0), 2)
+    cv2.line(simplified_lines_display, (short_hand[3],short_hand[4]), (short_hand[5], short_hand[6]), (255, 0, 0), 2)
+    save('simplified_lines_display', simplified_lines_display)
+    # Calculate angles
+    minute_angle = angle(long_hand, center)
+    hour_angle = angle(short_hand, center)
+    hour = str(int(hour_angle/30))
+    if len(hour) == 1:
+        hour = "0" + hour
+    minute = str(round(minute_angle/6))
+    if len(minute) == 1:
+        minute = "0" + minute
+    print(f"Time on the clock: {hour}:{minute}")
 else:
     print("No lines detected.")
 
-
-
-new_vectors = vector_simplification(vectors)
-
-for index, new_vector in enumerate(new_vectors):
-    dx, dy, length, x1, y1, x2, y2 = new_vector
-    color_name, bgr = LINE_COLORS[index % len(LINE_COLORS)]
-    cv2.line(lines_display, (x1, y1), (x2, y2), bgr, 2)
-    print(f"{index + 1}. {color_name}: ({x1},{y1}) -> ({x2},{y2}); Vector value: [{dx}, {dy}]; Vector length: [{length}]")
-
-file_lines_display = save('lines_display', lines_display)
-
-
-
-# Calculate angles
 
