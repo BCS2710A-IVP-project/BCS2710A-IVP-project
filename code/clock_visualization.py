@@ -144,6 +144,7 @@ if lines is not None:
         length = vector_length(dx, dy)
         vectors.append([dx, dy, length, x1, y1, x2, y2])
 
+    save('lines_display', lines_display)
     # Detect small and long hand 
     long_hand, short_hand = vector_simplification(vectors)
     cv2.line(simplified_lines_display, (long_hand[3],long_hand[4]), (long_hand[5], long_hand[6]), (255, 0, 0), 2)
