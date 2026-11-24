@@ -72,7 +72,6 @@ if __name__ == "__main__":
     for name, result in results.items():
         short_result = result.replace(":","")
         short_result = short_result.strip("\n")
-        print
         if len(result) == 5 and name.split("-")[1] == short_result:
             print(f"{name}: {result}")
             correct +=1
