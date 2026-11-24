@@ -9,7 +9,7 @@ BASE = Path(__file__).resolve().parent
 OUTPUT = BASE / 'steps'
 OUTPUT.mkdir(exist_ok=True)
 
-# Save the images
+# Save the images 
 def save(name, img):
     path = OUTPUT / f"{name}.png"
     
