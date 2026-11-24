@@ -429,11 +429,12 @@ class ClockVisualization:
             self.log(f"Detected lines: {len(lines)}")
             self.log(f"Filtered vectors: {len(vectors)}")
 
-            if self.vector_simplification(vectors, center) == None:
+            simplified_vectors = self.vector_simplification(vectors, center)
+            if simplified_vectors is None:
                 self.log("Could not detect two distinct clock hands.")
                 return "Could not detect two distinct clock hands."
             else:
-                long_hand, short_hand = self.vector_simplification(vectors, center)
+                long_hand, short_hand = simplified_vectors
 
             # Minute hand: blue
             cv2.line(
