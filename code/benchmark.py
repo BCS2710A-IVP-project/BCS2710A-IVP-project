@@ -63,11 +63,22 @@ def run_clock_images(images=None):
 
     return results
 
+correct = 0
 
 if __name__ == "__main__":
     clock_images = load_clock_images()
     print(f"Running {len(clock_images)} images from {CLOCKS_DIR}:")
     results = run_clock_images(clock_images)
     for name, result in results.items():
-        print(f"{name}: {result}")
+        short_result = result.replace(":","")
+        short_result = short_result.strip("\n")
+        print
+        if len(result) == 5 and name.split("-")[1] == short_result:
+            print(f"{name}: {result}")
+            correct +=1
+        elif len(result) == 5 and name.split("-")[1] != short_result:
+            print(f"{name}: {result} Incorrect time!")
+        else:
+            print(f"{name}: {result}")
+    print(f"Correct times: {correct}/{len(results)} times")
     print(f"Processing logs saved to {LOG_FILE}")
