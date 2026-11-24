@@ -3,7 +3,6 @@ import numpy as np
 from pathlib import Path
 import math 
 
-#test comment
 # Information to get the images for the presentation
 BASE = Path(__file__).resolve().parent
 OUTPUT = BASE / 'steps'
