@@ -5,12 +5,13 @@ import math
 
 
 class ClockVisualization:
-    def __init__(self):
+    def __init__(self,log_file):
         # Information to get the images for the presentation
         self.base = Path(__file__).resolve().parent
         self.output = self.base / 'steps'
         self.output.mkdir(exist_ok=True)
-        self.log_file = self.base / "clock_visualization.txt"
+        self.log_file = log_file
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)
         self.photo_name = "unspecified"
 
     def log(self, message):
@@ -490,6 +491,3 @@ class ClockVisualization:
             self.log("No lines detected.")
             return None
 
-
-if __name__ == "__main__":
-    ClockVisualization().run()

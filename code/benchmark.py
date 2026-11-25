@@ -7,16 +7,22 @@ from clock_visualization import ClockVisualization
 
 
 CLOCKS_DIR = Path(__file__).resolve().parent / "clocks"
-LOG_FILE = Path(__file__).resolve().with_name("clock_visualization.txt")
+LOG_FILE = (
+    Path(__file__).resolve().parent
+    / "logs"
+    / f"clock_visualization_{datetime.now().astimezone():%Y%m%d_%H%M%S}.txt"
+)
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
-
+#Opening logging session with a timestamp of when session started
 def log_benchmark_start():
     timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with LOG_FILE.open("a", encoding="utf-8") as log_file:
         log_file.write(f"Benchmark started at {timestamp}\n")
 
-
+#Loading clock images and their paths to an array for easier benchmarking
+#Correct image naming: clock(number)-(hours)-(minutes).jpg
 def load_clock_images(folder=CLOCKS_DIR):
     # Load supported clock images, keyed by filename without the extension.
     folder = Path(folder)
@@ -42,14 +48,14 @@ def load_clock_images(folder=CLOCKS_DIR):
 
     return images
 
-
+#Running clock time finding on each photo in an array and logging every process behind it
 def run_clock_images(images=None):
     log_benchmark_start()
 
     if images is None:
         images = load_clock_images()
 
-    visualizer = ClockVisualization()
+    visualizer = ClockVisualization(LOG_FILE)
     results = {}
 
     for name, image in images.items():
@@ -63,6 +69,7 @@ def run_clock_images(images=None):
 
     return results
 
+#Points calculation based on how far clock time finding was from the answer
 def clock_points(delta):
     if delta <= 2:
         return 1.0
@@ -73,7 +80,7 @@ def clock_points(delta):
     else:
         return 0
 
-
+#Calculating difference between correct time and time given by clock time finding in minutes
 def clock_delta_minutes(correct_hours, correct_minutes, received_hours, received_minutes):
     correct_time = (int(correct_hours) % 12) * 60 + int(correct_minutes)
     received_time = (int(received_hours) % 12) * 60 + int(received_minutes)
@@ -104,7 +111,7 @@ if __name__ == "__main__":
             )
             if delta == 0:
                 correct +=1
-                print(f"{name}: {result} -> Correct time!")
+                print(f"{name}: {result} -> Correct time! (points = 1)")
             else:
                 print(f"{name}: {result} -> Incorrect time! (delta = {delta} minute(s); points = {clock_points(delta)})")
         else:
