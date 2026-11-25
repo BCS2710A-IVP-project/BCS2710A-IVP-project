@@ -63,21 +63,55 @@ def run_clock_images(images=None):
 
     return results
 
+def clock_points(delta):
+    if delta <= 2:
+        return 1.0
+    elif delta <= 10:
+        return 0.8
+    elif delta <= 30:
+        return 0.5
+    else:
+        return 0
+
+
+def clock_delta_minutes(correct_hours, correct_minutes, received_hours, received_minutes):
+    correct_time = (int(correct_hours) % 12) * 60 + int(correct_minutes)
+    received_time = (int(received_hours) % 12) * 60 + int(received_minutes)
+    difference = abs(correct_time - received_time)
+    return min(difference, 12 * 60 - difference)
+
+detected = 0    
 correct = 0
+points = 0
 
 if __name__ == "__main__":
     clock_images = load_clock_images()
     print(f"Running {len(clock_images)} images from {CLOCKS_DIR}:")
     results = run_clock_images(clock_images)
     for name, result in results.items():
-        short_result = result.replace(":","")
-        short_result = short_result.strip("\n")
-        if len(result) == 5 and name.split("-")[1] == short_result:
-            print(f"{name}: {result}")
-            correct +=1
-        elif len(result) == 5 and name.split("-")[1] != short_result:
-            print(f"{name}: {result} Incorrect time!")
+        delta = 0
+        if len(result) == 5:
+            detected +=1
+            received_hours = result.split(":")[0]
+            received_minutes = result.split(":")[1]
+            correct_hours = name.split("-")[1]
+            correct_minutes = name.split("-")[2]
+            delta = clock_delta_minutes(
+                correct_hours,
+                correct_minutes,
+                received_hours,
+                received_minutes,
+            )
+            if delta == 0:
+                correct +=1
+                print(f"{name}: {result} -> Correct time!")
+            else:
+                print(f"{name}: {result} -> Incorrect time! (delta = {delta} minute(s); points = {clock_points(delta)})")
         else:
             print(f"{name}: {result}")
-    print(f"Correct times: {correct}/{len(results)} times")
+        points += clock_points(delta)
+
+    print(f"Detected clocks: {detected} ({detected/len(results)*100:.2f}%)")
+    print(f"Correct times: {correct}/{len(results)} times ({correct/len(results)*100:.2f}%)")
+    print(f"Total points: {points}/{len(results)} ({points/len(results)*100:.2f}%)")
     print(f"Processing logs saved to {LOG_FILE}")
