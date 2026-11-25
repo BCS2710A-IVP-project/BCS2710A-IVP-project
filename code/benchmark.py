@@ -118,7 +118,7 @@ if __name__ == "__main__":
             print(f"{name}: {result}")
         points += clock_points(delta)
 
-    print(f"Detected clocks: {detected} ({detected/len(results)*100:.2f}%)")
-    print(f"Correct times: {correct}/{len(results)} times ({correct/len(results)*100:.2f}%)")
+    print(f"Detected clocks: {detected}/{len(results)} ({detected/len(results)*100:.2f}%)")
+    print(f"Correct times: {correct}/{len(results)} ({correct/len(results)*100:.2f}%)")
     print(f"Total points: {points}/{len(results)} ({points/len(results)*100:.2f}%)")
     print(f"Processing logs saved to {LOG_FILE}")

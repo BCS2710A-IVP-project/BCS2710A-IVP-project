@@ -224,7 +224,8 @@ class ClockVisualization:
             image = cv2.imread(str(image_path))
             if image is None:
                 self.log(f"Cannot open image: {image_path}")
-                raise FileNotFoundError(f"Cannot open image: {image_path}")
+                return f"Cannot open image: {image_path}"
+                #raise FileNotFoundError(f"Cannot open image: {image_path}")
 
         # Convert the image to grayscale
         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
