@@ -96,7 +96,9 @@ if __name__ == "__main__":
     print(f"Running {len(clock_images)} images from {CLOCKS_DIR}:")
     results = run_clock_images(clock_images)
     for name, result in results.items():
-        delta = 0
+        if not isinstance(result, str) or len(result) != 5:
+            print(f"{name}: Detection failed ({result})")
+            continue
         if len(result) == 5:
             detected +=1
             received_hours = result.split(":")[0]

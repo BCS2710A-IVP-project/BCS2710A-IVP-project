@@ -15,6 +15,7 @@ class ClockVisualization:
         self.photo_name = "unspecified"
 
     def log(self, message):
+        print(f"{self.photo_name}: {message}")
         with self.log_file.open("a", encoding="utf-8") as log_file:
             log_file.write(f"{self.photo_name}: {message}\n")
 
@@ -27,6 +28,125 @@ class ClockVisualization:
 
         self.log(f"{path} saved successfully")
         return path
+
+    def ellipse_score(self, ellipse, distance_map):
+        (cx, cy), (width, height), ellipse_angle = ellipse
+
+        a = width / 2
+        b = height / 2
+        phi = np.radians(ellipse_angle)
+
+        theta = np.linspace(0, 2 * np.pi, 360, endpoint=False)
+
+        h, w = distance_map.shape
+
+        tolerance = np.clip(min(a, b) * 0.015, 2, 5)
+
+        def contour_score(scale):
+
+            x = a * scale * np.cos(theta)
+            y = b * scale * np.sin(theta)
+
+            xs = np.round(
+                cx + x * np.cos(phi) - y * np.sin(phi)
+            ).astype(int)
+
+            ys = np.round(
+                cy + x * np.sin(phi) + y * np.cos(phi)
+            ).astype(int)
+
+            valid = (
+                (xs >= 0) & (xs < w) &
+                (ys >= 0) & (ys < h)
+            )
+
+            distances = distance_map[ys[valid], xs[valid]]
+
+            return np.sum(distances <= tolerance) / 360
+
+        main_score = contour_score(1.0)
+        inner_score = contour_score(0.90)
+        outer_score = contour_score(1.10)
+
+        background_score = (
+            inner_score + outer_score
+        ) / 2
+
+        return main_score * (1 - 0.5 * background_score)
+
+    # Evaluate the presence of concentric ellipses
+    def concentric_score(self, ellipse, ellipses):
+
+        (cx, cy), (width, height), _ = ellipse
+
+        radius = min(width, height) / 2
+        axis_ratio = min(width, height) / max(width, height)
+
+        count = 0
+
+        for other in ellipses:
+
+            if other is ellipse:
+                continue
+
+            (ox, oy), (ow, oh), _ = other
+
+            other_radius = min(ow, oh) / 2
+            other_ratio = min(ow, oh) / max(ow, oh)
+
+            center_distance = math.hypot(
+                cx - ox, cy - oy
+            )
+
+            size_ratio = other_radius / radius
+
+            if (
+                center_distance < radius * 0.10
+                and 0.75 < size_ratio < 1.30
+                and abs(axis_ratio - other_ratio) < 0.15
+            ):
+                count += 1
+
+        return min(count / 3, 1.0)
+
+    # Transform an elliptical clock face into a circular one
+    def rectify_ellipse(self, image, ellipse):
+
+        (ex, ey), (ew, eh), ellipse_angle = ellipse
+
+        a = ew / 2
+        b = eh / 2
+
+        target_radius = max(a, b)
+
+        phi = np.radians(ellipse_angle)
+
+        rotation = np.array([
+            [np.cos(phi), -np.sin(phi)],
+            [np.sin(phi), np.cos(phi)]
+        ])
+
+        scaling = np.array([
+            [target_radius / a, 0],
+            [0, target_radius / b]
+        ])
+
+        linear = rotation @ scaling @ rotation.T
+
+        ellipse_center = np.array([ex, ey])
+
+        translation = ellipse_center - linear @ ellipse_center
+
+        matrix = np.column_stack((linear, translation))
+
+        h, w = image.shape[:2]
+
+        return cv2.warpAffine(
+            image,
+            matrix,
+            (w, h),
+            flags=cv2.INTER_LINEAR
+        )
 
     # Calculate how well a circle matches the detected edges
     def circle_score(self, x, y, r, distance_map):
@@ -212,12 +332,17 @@ class ClockVisualization:
     def run(self, image=None, image_name=None):
         # Load the image
         if image is None:
-            image_path = self.base / "clocks" / "clock15.jpg"
+            image_path = self.base / "clocks" / "clock7-12-55.jpg"
             image_name = image_name or image_path.name
         else:
             image_name = image_name or "provided image"
 
         self.photo_name = image_name
+
+        # Create a separate output folder for each clock
+        self.output = self.base / "steps" / Path(image_name).stem
+        self.output.mkdir(parents=True, exist_ok=True)
+
         self.log("Starting photo processing")
 
         if image is None:
@@ -231,13 +356,174 @@ class ClockVisualization:
         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         self.save('grayscaled_image', gray_image)
 
-        # Apply Gaussian blur to reduce noise and improve edge detection
-        blurred_image = cv2.GaussianBlur(gray_image, (15, 15), 0)
+        # Gaussian Blur
+        blurred_image = cv2.GaussianBlur(
+            gray_image, (15, 15), 0
+        )
+
         self.save('blurred_image', blurred_image)
 
         # Find edges in the image
         edges_display = cv2.Canny(blurred_image, 100, 200)
         self.save('edges_display', edges_display)
+
+        # Detect ellipse candidates
+        ellipse_blurred = cv2.GaussianBlur(
+            gray_image, (5, 5), 0
+        )
+
+        ellipse_edges = cv2.Canny(
+            ellipse_blurred, 50, 100
+        )
+
+        self.save("ellipse_edges", ellipse_edges)
+
+        h, w = ellipse_edges.shape
+        contours, _ = cv2.findContours(
+            ellipse_edges.copy(),
+            cv2.RETR_LIST,
+            cv2.CHAIN_APPROX_NONE
+        )
+
+        ellipses = []
+
+        for contour in contours:
+
+            if len(contour) < 5:
+                continue
+
+            ellipse = cv2.fitEllipse(contour)
+
+            (cx, cy), (width, height), ellipse_angle = ellipse
+
+            major_axis = max(width, height)
+            minor_axis = min(width, height)
+
+            if minor_axis < min(h, w) * 0.15:
+                continue
+
+            if minor_axis / major_axis < 0.4:
+                continue
+
+            if major_axis > math.hypot(w, h):
+                continue
+
+            if not (0 <= cx < w and 0 <= cy < h):
+                continue
+
+            ellipses.append(ellipse)
+
+        ellipses_display = cv2.cvtColor(
+            ellipse_edges, cv2.COLOR_GRAY2BGR
+        )
+
+        for ellipse in ellipses:
+            cv2.ellipse(
+                ellipses_display, ellipse, (0, 255, 0), 2
+            )
+
+        self.save("ellipses_display", ellipses_display)
+
+        self.log(f"Detected ellipses: {len(ellipses)}")
+
+        # Select the best ellipse
+        distance_map = cv2.distanceTransform(
+            cv2.bitwise_not(ellipse_edges),
+            cv2.DIST_L2,
+            5
+        )
+
+        best_ellipse = None
+        axis_ratio = 1.0
+
+        if ellipses:
+
+            best_ellipse = max(
+                ellipses,
+                key=lambda e: (
+                    0.65 * self.ellipse_score(e, distance_map)
+                    + 0.35 * self.concentric_score(e, ellipses)
+                )
+            )
+
+            selected_ellipse = ellipses_display.copy()
+
+            cv2.ellipse(
+                selected_ellipse, best_ellipse, (0, 0, 255), 3
+            )
+
+            (cx, cy), (width, height), ellipse_angle = best_ellipse
+
+            cv2.circle(
+                selected_ellipse,
+                (round(cx), round(cy)),
+                5, (0, 0, 255), -1
+            )
+
+            self.save("selected_ellipse", selected_ellipse)
+
+            axis_ratio = min(width, height) / max(width, height)
+
+            self.log(
+                f"Ellipse score: "
+                f"{self.ellipse_score(best_ellipse, distance_map):.3f}"
+            )
+
+            self.log(f"Axis ratio: {axis_ratio:.3f}")
+
+            score = self.ellipse_score(
+                best_ellipse, distance_map
+            )
+
+            if score < 0.50:
+                self.log("Ellipse rejected: low confidence.")
+                best_ellipse = None
+                axis_ratio = 1.0
+
+        else:
+            self.log("No valid ellipse detected.")
+
+        # Geometric rectification
+        if best_ellipse is not None and axis_ratio < 0.95:
+
+            self.log("Geometric rectification required.")
+
+            rectified_image = self.rectify_ellipse(
+                image, best_ellipse
+            )
+
+            self.save("rectified_image", rectified_image)
+
+            # Update image processing
+            image = rectified_image.copy()
+
+            gray_image = cv2.cvtColor(
+                image, cv2.COLOR_BGR2GRAY
+            )
+
+            blurred_image = cv2.GaussianBlur(
+                gray_image, (15, 15), 0
+            )
+
+            edges_display = cv2.Canny(blurred_image, 100, 200)
+
+            self.save(
+                "rectified_grayscale", gray_image
+            )
+
+            self.save(
+                "rectified_blurred", blurred_image
+            )
+
+            self.save(
+                "rectified_edges", edges_display
+            )
+
+        else:
+
+            self.log("No geometric rectification required.")
+
+            self.save("rectified_image", image)
 
         # Find circles using adaptive detection
         h, w = gray_image.shape
@@ -411,6 +697,36 @@ class ClockVisualization:
                 dx, dy = self.vector(x1, y1, x2, y2)
                 length = self.vector_length(dx, dy)
 
+                # Calculate distance between the clock center
+                # and the infinite line
+
+                p = np.array([x1, y1], dtype=float)
+                direction = np.array([dx, dy], dtype=float)
+
+                center_point = np.array(center, dtype=float)
+
+                t = np.dot(
+                    center_point - p, direction
+                ) / max(np.dot(direction, direction), 1)
+
+                closest_point = p + t * direction
+
+                distance = np.linalg.norm(
+                    closest_point - center_point
+                )
+
+                # Reject lines too far from the clock center
+                if distance > max(5, radius * 0.30):
+                    continue
+
+                cv2.line(
+                    lines_display,
+                    (x1, y1),
+                    (x2, y2),
+                    (255, 0, 0),
+                    2
+                )
+
                 v = [dx, dy, length, x1, y1, x2, y2]
 
                 width = self.hand_width(v, center, thickness_map, radius)
@@ -491,4 +807,16 @@ class ClockVisualization:
             #print("No lines detected.")
             self.log("No lines detected.")
             return None
+        
+if __name__ == "__main__":
+
+    base = Path(__file__).resolve().parent
+
+    log_file = base / "logs" / "clock_log.txt"
+
+    clock = ClockVisualization(log_file)
+
+    result = clock.run()
+
+    print("Result:", result)
 
